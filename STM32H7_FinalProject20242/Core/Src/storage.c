@@ -5,7 +5,6 @@
 
 #include "stm32h7xx_hal_gpio.h"
 #include "stm32h7xx_hal_rcc.h"
-char tmp[256];
 
 #define BUFFER_SIZE 256
 #define MAX_RETRY 3
@@ -19,15 +18,32 @@ extern TIM_HandleTypeDef htim6;
 extern UART_HandleTypeDef huart1;
 uint32_t g_NbSector;
 
-/*Print Data in queque*/
+/* Hàm debug với timestamp */
+void debug_print(const char* format, ...) {
+    char buffer[128] = {0};
+    va_list args;
+    
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    
+    HAL_UART_Transmit(&huart1, (uint8_t*)buffer, strlen(buffer), 100);
+}
+
+/* Đọc dữ liệu từ queue với xử lý lỗi */
 void ReadData(LIFO_inst *q)
 {
-	char buffer[128] = {0};
-	if(!QueueIsEmpty(q))
-	{
+    if(!q) {
+        debug_print("M[%d] Error: Invalid queue pointer\r\n", g_systemtick/1000);
+        return;
+    }
 
-		sprintf(buffer, "M[%d] Read Data - front = %d rear = %d",g_systemtick/1000,q->pnt_front,q->pnt_rear);
-		HAL_UART_Transmit(&huart1, buffer, strlen(buffer), 100);
+    char buffer[128] = {0};
+    if(!QueueIsEmpty(q))
+    {
+        sprintf(buffer, "M[%d] Read Data - front = %d rear = %d\r\n", 
+                g_systemtick/1000, q->pnt_front, q->pnt_rear);
+        HAL_UART_Transmit(&huart1, (uint8_t*)buffer, strlen(buffer), 100);
 
 		bzero(buffer, sizeof(buffer));
 		sprintf(buffer,"M[%d] Last Data at Rear Pointer:",g_systemtick/1000);
