@@ -346,18 +346,16 @@ uint8_t USER_SPI_initialize (
 		}
 	}
 	CardType = ty;	/* Card type */
-	// chưa define card type
-
 	despiselect();
 
-//	if (ty) {			/* OK */
-//		FCLK_FAST();			/* Set fast clock */
-//		Stat &= ~STA_NOINIT;	/* Clear STA_NOINIT flag */
-//	} else {			/* Failed */
-//		Stat = STA_NOINIT;
-//	}
+if (ty) {
+    //FCLK_FAST(); // Nếu cần tốc độ cao hơn
+    Stat &= ~STA_NOINIT; // Đã khởi tạo thành công
+} else {
+    Stat = STA_NOINIT;   // Khởi tạo thất bại
+}
 
-	return Stat;
+return Stat;
 }
 /*-----------------------------------------------------------------------*/
 /* Get disk status                                                       */
