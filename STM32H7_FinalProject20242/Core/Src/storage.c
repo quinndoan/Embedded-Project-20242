@@ -7,8 +7,11 @@
 #include "stm32h7xx_hal_rcc.h"
 char tmp[256];
 
-extern uint32_t g_systemtick;
+#define BUFFER_SIZE 256
+#define MAX_RETRY 3
 
+char tmp[BUFFER_SIZE];
+extern uint32_t g_systemtick;
 extern SPI_HandleTypeDef hspi2;
 
 extern TIM_HandleTypeDef htim6;

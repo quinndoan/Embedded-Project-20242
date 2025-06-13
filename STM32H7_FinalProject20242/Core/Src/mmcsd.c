@@ -91,34 +91,45 @@ uint8_t SPI_Timer_Status() {
 
 uint8_t xchg_spi (uint8_t dat)
 {
-	uint8_t rxDat;
-	HAL_SPI_TransmitReceive(&hspi2, &dat, &rxDat, 1, 100);
-	return rxDat;
-
+    uint8_t rxDat;
+    HAL_StatusTypeDef status;
+    
+    status = HAL_SPI_TransmitReceive(&hspi2, &dat, &rxDat, 1, 100);
+    if(status != HAL_OK) {
+        return 0xFF; // Trả về giá trị lỗi
+    }
+    return rxDat;
 }
 
 /* Receive multiple byte */
 
 void rcvr_spi_multi (
 	uint8_t *buff,		/* Pointer to data buffer */
-	uint32_t btr		/* Number of bytes to receive (even number) */
+	uint32_t btr		/* Number of bytes to receive */
 )
 {
 	uint32_t i;
-	for( i=0; i<btr; i++) {
-		*(buff+i) = xchg_spi(0xFF);
+	uint8_t dummy = 0xFF;
+	
+	for(i = 0; i < btr; i++) {
+		if(HAL_SPI_TransmitReceive(&hspi2, &dummy, &buff[i], 1, 100) != HAL_OK) {
+			break; // Thoát nếu có lỗi
+		}
 	}
 }
 
 /* Send multiple byte */
 void xmit_spi_multi (
 	const uint8_t *buff,	/* Pointer to the data */
-	uint32_t btx			/* Number of bytes to send (even number) */
+	uint32_t btx			/* Number of bytes to send */
 )
 {
 	uint32_t i;
-	for( i=0; i<btx; i++) {
-		xchg_spi(*(buff+i));
+	
+	for(i = 0; i < btx; i++) {
+		if(HAL_SPI_Transmit(&hspi2, (uint8_t*)&buff[i], 1, 100) != HAL_OK) {
+			break; // Thoát nếu có lỗi
+		}
 	}
 }
 
@@ -127,19 +138,20 @@ int wait_ready (	/* 1:Ready, 0:Timeout */
 )
 {
 	uint8_t d;
-	//wait_ready needs its own timer, unfortunately, so it can't use the
-	//spi_timer functions
-	uint32_t waitSpiTimerTickStart;
-	uint32_t waitSpiTimerTickDelay;
-
-	waitSpiTimerTickStart = HAL_GetTick();
-	waitSpiTimerTickDelay = (uint32_t)wt;
+	uint32_t start = HAL_GetTick();
+	
 	do {
 		d = xchg_spi(0xFF);
-		/* This loop takes a time. Insert rot_rdq() here for multitask envilonment. */
-	} while (d != 0xFF && ((HAL_GetTick() - waitSpiTimerTickStart) < waitSpiTimerTickDelay));	/* Wait for card goes ready or timeout */
-
-	return (d == 0xFF) ? 1 : 0;
+		if(d == 0xFF) return 1;
+		
+		// Kiểm tra timeout
+		if((HAL_GetTick() - start) >= wt) {
+			return 0;
+		}
+		
+		// Thêm delay nhỏ để giảm tải CPU
+		HAL_Delay(1);
+	} while(1);
 }
 
 
@@ -167,14 +179,21 @@ void despiselect (void)
 
 int spiselect (void)	/* 1:OK, 0:Timeout */
 {
-	//CS_LOW();		/* Set CS# low */
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
-	// trigger the SPI, end of use
-	xchg_spi(0xFF);	/* Dummy clock (force MISO enabled) */
-	if (wait_ready(500)) return 1;	/* Wait for card ready */
-
-	despiselect();
-	return 0;	/* Timeout */
+	uint8_t retry = 3;  // Số lần thử lại
+	
+	while(retry--) {
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+		xchg_spi(0xFF);
+		
+		if(wait_ready(500)) {
+			return 1;
+		}
+		
+		despiselect();
+		HAL_Delay(10);  // Delay giữa các lần thử
+	}
+	
+	return 0;
 }
 
 
@@ -189,19 +208,25 @@ int rcvr_datablock (	/* 1:OK, 0:Error */
 )
 {
 	uint8_t token;
-
-
-	SPI_Timer_On(200);
-	do {							/* Wait for DataStart token in timeout of 200ms */
+	uint32_t start = HAL_GetTick();
+	
+	do {
 		token = xchg_spi(0xFF);
-		/* This loop will take a time. Insert rot_rdq() here for multitask envilonment. */
-	} while ((token == 0xFF) && SPI_Timer_Status());
-	if(token != 0xFE) return 0;		/* Function fails if invalid DataStart token or timeout */
-
-	rcvr_spi_multi(buff, btr);		/* Store trailing data to the buffer */
-	xchg_spi(0xFF); xchg_spi(0xFF);			/* Discard CRC */
-
-	return 1;						/* Function succeeded */
+		if(token == 0xFE) break;
+		
+		if((HAL_GetTick() - start) >= 200) {
+			return 0;  // Timeout
+		}
+	} while(1);
+	
+	// Nhận dữ liệu
+	rcvr_spi_multi(buff, btr);
+	
+	// Bỏ qua CRC
+	xchg_spi(0xFF);
+	xchg_spi(0xFF);
+	
+	return 1;
 }
 
 
@@ -216,18 +241,21 @@ int xmit_datablock (	/* 1:OK, 0:Failed */
 )
 {
 	uint8_t resp;
-
-
-	if (!wait_ready(500)) return 0;		/* Wait for card ready */
-
-	xchg_spi(token);					/* Send token */
-	if (token != 0xFD) {				/* Send data if token is other than StopTran */
-		xmit_spi_multi(buff, MMC_SECTOR_SIZE);		/* Data */
-		xchg_spi(0xFF); xchg_spi(0xFF);	/* Dummy CRC */
-
-		resp = xchg_spi(0xFF);				/* Receive data resp */
-		if ((resp & 0x1F) != 0x05) return 0;	/* Function fails if the data packet was not accepted */
+	
+	if(!wait_ready(500)) return 0;
+	
+	xchg_spi(token);
+	if(token != 0xFD) {
+		xmit_spi_multi(buff, MMC_SECTOR_SIZE);
+		xchg_spi(0xFF);
+		xchg_spi(0xFF);
+		
+		resp = xchg_spi(0xFF);
+		if((resp & 0x1F) != 0x05) {
+			return 0;
+		}
 	}
+	
 	return 1;
 }
 
