@@ -1,0 +1,2 @@
+../Core/Src/fatfs.c:60:6:MX_FATFS_Init	1
+../Core/Src/fatfs.c:75:7:get_fattime	1
