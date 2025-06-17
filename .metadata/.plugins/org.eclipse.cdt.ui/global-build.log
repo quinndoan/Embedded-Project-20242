@@ -1,82 +1,14 @@
-11:49:02 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
+12:47:49 **** Incremental Build of configuration Debug for project STM32_Try2 ****
 make -j16 all 
-arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F429xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -I../FATFS/Target -I../FATFS/App -I../USB_DEVICE/App -I../USB_DEVICE/Target -I../Middlewares/Third_Party/FatFs/src -I../Middlewares/ST/STM32_USB_Device_Library/Core/Inc -I../Middlewares/ST/STM32_USB_Device_Library/Class/MSC/Inc -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
-../Core/Src/main.c: In function 'send_uart':
-../Core/Src/main.c:90:29: warning: pointer targets in passing argument 2 of 'HAL_UART_Transmit' differ in signedness [-Wpointer-sign]
-   90 |   HAL_UART_Transmit(&huart1,(char*) buf1, sizeof(buf1), 2000);
-      |                             ^~~~~~~~~~~~
-      |                             |
-      |                             char *
-In file included from ../Core/Inc/stm32f4xx_hal_conf.h:411,
-                 from ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:29,
-                 from ../Core/Inc/main.h:30,
-                 from ../Core/Src/main.c:20:
-../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:745:79: note: expected 'const uint8_t *' {aka 'const unsigned char *'} but argument is of type 'char *'
-  745 | HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *huart, const uint8_t *pData, uint16_t Size, uint32_t Timeout);
-      |                                                                ~~~~~~~~~~~~~~~^~~~~
-../Core/Src/main.c: In function 'main':
-../Core/Src/main.c:184:1: warning: "/*" within comment [-Wcomment]
-  184 | /* Open file to write */
-      |  
-../Core/Src/main.c:211:21: warning: passing argument 2 of 'f_gets' makes integer from pointer without a cast [-Wint-conversion]
-  211 |   f_gets(buffer, fil.buf, &fil);
-      |                  ~~~^~~~
-      |                     |
-      |                     BYTE * {aka unsigned char *}
-In file included from ../FATFS/App/fatfs.h:26,
-                 from ../Core/Src/main.c:21:
-../Middlewares/Third_Party/FatFs/src/ff.h:274:33: note: expected 'int' but argument is of type 'BYTE *' {aka 'unsigned char *'}
-  274 | TCHAR* f_gets (TCHAR* buff, int len, FIL* fp);                                          /* Get a string from the file */
-      |                             ~~~~^~~
-../Core/Src/main.c:220:26: warning: character constant too long for its type
-  220 |   fresult = f_open(&fil, 'file1.txt', FA_OPEN_ALWAYS | FA_WRITE);
-      |                          ^~~~~~~~~~~
-../Core/Src/main.c:220:26: warning: passing argument 2 of 'f_open' makes pointer from integer without a cast [-Wint-conversion]
-  220 |   fresult = f_open(&fil, 'file1.txt', FA_OPEN_ALWAYS | FA_WRITE);
-      |                          ^~~~~~~~~~~
-      |                          |
-      |                          int
-../Middlewares/Third_Party/FatFs/src/ff.h:242:39: note: expected 'const TCHAR *' {aka 'const char *'} but argument is of type 'int'
-  242 | FRESULT f_open (FIL* fp, const TCHAR* path, BYTE mode);                         /* Open or create a file */
-      |                          ~~~~~~~~~~~~~^~~~
-../Core/Src/main.c:223:30: warning: passing argument 2 of 'f_lseek' makes integer from pointer without a cast [-Wint-conversion]
-  223 |   fresult = f_lseek(&fil, fil.buf); // xem lai de la f.size
-      |                           ~~~^~~~
-      |                              |
-      |                              BYTE * {aka unsigned char *}
-../Middlewares/Third_Party/FatFs/src/ff.h:246:35: note: expected 'FSIZE_t' {aka 'long unsigned int'} but argument is of type 'BYTE *' {aka 'unsigned char *'}
-  246 | FRESULT f_lseek (FIL* fp, FSIZE_t ofs);                                                         /* Move file pointer of the file object */
-      |                           ~~~~~~~~^~~
-../Core/Src/main.c:235:27: warning: passing argument 3 of 'f_read' makes integer from pointer without a cast [-Wint-conversion]
-  235 |   f_read(&fil, buffer, fil.buf, &br);
-      |                        ~~~^~~~
-      |                           |
-      |                           BYTE * {aka unsigned char *}
-../Middlewares/Third_Party/FatFs/src/ff.h:244:43: note: expected 'UINT' {aka 'unsigned int'} but argument is of type 'BYTE *' {aka 'unsigned char *'}
-  244 | FRESULT f_read (FIL* fp, void* buff, UINT btr, UINT* br);                       /* Read data from the file */
-      |                                      ~~~~~^~~
-arm-none-eabi-gcc -o "STM32_20242_ReadFile.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\Embedded-Project-20242\STM32_20242_ReadFile\STM32F429ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32_20242_ReadFile.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: STM32_20242_ReadFile.elf
- 
-arm-none-eabi-size  STM32_20242_ReadFile.elf 
-arm-none-eabi-objdump -h -S STM32_20242_ReadFile.elf  > "STM32_20242_ReadFile.list"
+arm-none-eabi-size  STM32_Try2.elf 
    text	   data	    bss	    dec	    hex	filename
-  63760	    356	  15172	  79288	  135b8	STM32_20242_ReadFile.elf
+  25740	    116	   7700	  33556	   8314	STM32_Try2.elf
 Finished building: default.size.stdout
  
-Finished building: STM32_20242_ReadFile.list
- 
-11:49:24 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
+12:47:56 **** Incremental Build of configuration Debug for project STM32_Try2 ****
 make -j16 all 
-arm-none-eabi-size  STM32_20242_ReadFile.elf 
+arm-none-eabi-size  STM32_Try2.elf 
    text	   data	    bss	    dec	    hex	filename
-  63760	    356	  15172	  79288	  135b8	STM32_20242_ReadFile.elf
-Finished building: default.size.stdout
- 
-11:50:57 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
-make -j16 all 
-arm-none-eabi-size  STM32_20242_ReadFile.elf 
-   text	   data	    bss	    dec	    hex	filename
-  63760	    356	  15172	  79288	  135b8	STM32_20242_ReadFile.elf
+  25740	    116	   7700	  33556	   8314	STM32_Try2.elf
 Finished building: default.size.stdout
  

@@ -1,10 +1,10 @@
-11:50:57 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
+12:43:38 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
 make -j16 all 
 arm-none-eabi-size  STM32_20242_ReadFile.elf 
    text	   data	    bss	    dec	    hex	filename
-  63760	    356	  15172	  79288	  135b8	STM32_20242_ReadFile.elf
+  63204	    356	  15172	  78732	  1338c	STM32_20242_ReadFile.elf
 Finished building: default.size.stdout
  
 
-11:50:57 Build Finished. 0 errors, 0 warnings. (took 616ms)
+12:43:39 Build Finished. 0 errors, 0 warnings. (took 581ms)
 
