@@ -205,7 +205,7 @@ int main(void)
   send_uart ("file1.txt created and the data is written\n");
 
   // open file to read
-  fresult = f_open(&fil, "file.txt", FA_READ);
+  fresult = f_open(&fil, "file1.txt", FA_READ);
 
   // read string from the file
   f_gets(buffer, fil.buf, &fil);
