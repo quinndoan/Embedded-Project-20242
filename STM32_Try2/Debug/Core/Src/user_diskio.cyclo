@@ -1,5 +1,0 @@
-../Core/Src/user_diskio.c:126:9:USER_initialize	2
-../Core/Src/user_diskio.c:144:9:USER_status	2
-../Core/Src/user_diskio.c:163:9:USER_read	6
-../Core/Src/user_diskio.c:200:9:USER_write	7
-../Core/Src/user_diskio.c:238:9:USER_ioctl	6

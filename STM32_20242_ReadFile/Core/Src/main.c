@@ -23,7 +23,9 @@
 #include "string.h"
 #include "fatfs_sd.h"
 #include "stm32f4xx_hal.h"
-#include "stdint.h"
+#include <stdint.h>
+
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -78,7 +80,10 @@ UINT br, bw;
 FATFS *pfs;
 DWORD fre_clust;
 uint32_t total, free_space;
-
+char option[4];
+char namebuf[128];
+char filebuf[1024];
+FRESULT fres;
 // to send data to uart
 void send_uart(char *string)
 {
@@ -111,6 +116,31 @@ void bufclear(void){
 void clear_buffer (void)
 {
 	for (int i=0; i<1024; i++) buffer[i] = '\0';
+}
+
+// Hàm nhận chuỗi từ UART (blocking, kết thúc khi gặp '!' hoặc '\n')
+void uart_receive_string(char* buf, uint16_t maxlen) {
+    uint16_t i = 0;
+    char c;
+    while (i < maxlen - 1) {
+        HAL_UART_Receive(&huart1, (uint8_t*)&c, 1, HAL_MAX_DELAY);
+        if (c == '!' || c == '\n') break;
+        buf[i++] = c;
+        HAL_UART_Transmit(&huart1, (uint8_t*)&c, 1, 100); // Echo lại ký tự
+    }
+    buf[i] = '\0';
+    char crlf[2] = "\r\n";
+    HAL_UART_Transmit(&huart1, (uint8_t*)crlf, 2, 100);
+}
+
+// Hàm nhận 1 ký tự từ UART (dùng cho chọn option)
+char uart_receive_char(void) {
+    char c;
+    HAL_UART_Receive(&huart1, (uint8_t*)&c, 1, HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t*)&c, 1, 100); // Echo lại ký tự
+    char crlf[2] = "\r\n";
+    HAL_UART_Transmit(&huart1, (uint8_t*)crlf, 2, 100);
+    return c;
 }
 /* USER CODE END 0 */
 
@@ -147,7 +177,6 @@ int main(void)
   MX_USART1_UART_Init();
   MX_FATFS_Init();
   MX_USB_DEVICE_Init();
-  //SD_FATFS_Init();
   /* USER CODE BEGIN 2 */
   HAL_Delay(500);
   // Mount the SD card
@@ -174,21 +203,6 @@ int main(void)
     Error_Handler();
   }
   send_uart("SD Card mounted successfully\n");
-
-/*
-  // Check if SD card is ready
-  if (disk_status(0) & STA_NOINIT) {
-    send_uart("SD Card not initialized\n");
-    Error_Handler();
-  }
-  if (disk_status(0) & STA_NODISK) {
-    send_uart("No SD card detected\n");
-    Error_Handler();
-  }
-  if (disk_status(0) & STA_PROTECT) {
-    send_uart("SD Card is write protected\n");
-    Error_Handler();
-  }
 
 
 /* Open file to write */
@@ -256,168 +270,179 @@ int main(void)
   if (fresult == FR_OK){
 	  send_uart("file1.txt removed sucessfully\n");
   }
-*/
-  fresult = f_mount(&fs, "/", 1);
-    	if (fresult != FR_OK) send_uart ("ERROR in mounting SD CARD...\n\n");
-    	else send_uart("SD CARD mounted successfully...\n\n");
+
+//   fresult = f_mount(&fs, "/", 1);
+//     	if (fresult != FR_OK) send_uart ("ERROR in mounting SD CARD...\n\n");
+//     	else send_uart("SD CARD mounted successfully...\n\n");
 
 
-    	/*************** Card capacity details ********************/
+//     	/*************** Card capacity details ********************/
 
-    	/* Check free space */
-    	f_getfree("", &fre_clust, &pfs);
+//     	/* Check free space */
+//     	f_getfree("", &fre_clust, &pfs);
 
-    	total = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
-    	sprintf (buffer, "SD CARD Total Size: \t%lu\n",total);
-    	send_uart(buffer);
-    	clear_buffer();
-    	free_space = (uint32_t)(fre_clust * pfs->csize * 0.5);
-    	sprintf (buffer, "SD CARD Free Space: \t%lu\n\n",free_space);
-    	send_uart(buffer);
-    	clear_buffer();
+//     	total = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
+//     	sprintf (buffer, "SD CARD Total Size: \t%lu\n",total);
+//     	send_uart(buffer);
+//     	clear_buffer();
+//     	free_space = (uint32_t)(fre_clust * pfs->csize * 0.5);
+//     	sprintf (buffer, "SD CARD Free Space: \t%lu\n\n",free_space);
+//     	send_uart(buffer);
+//     	clear_buffer();
 
+// /*
 
+//     	/************* The following operation is using PUTS and GETS *********************/
 
-    	/************* The following operation is using PUTS and GETS *********************/
+//     	/* Open file to write/ create a file if it doesn't exist */
+//         fresult = f_open(&fil, "file1.txt", FA_OPEN_ALWAYS | FA_READ | FA_WRITE);
 
-    	/* Open file to write/ create a file if it doesn't exist */
-        fresult = f_open(&fil, "file1.txt", FA_OPEN_ALWAYS | FA_READ | FA_WRITE);
+//     	/* Writing text */
+//     	f_puts("This data is from the FILE1.txt. And it was written using ...f_puts... ", &fil);
 
-    	/* Writing text */
-    	f_puts("This data is from the FILE1.txt. And it was written using ...f_puts... ", &fil);
+//     	/* Close file */
+//     	fresult = f_close(&fil);
 
-    	/* Close file */
-    	fresult = f_close(&fil);
+//     	if (fresult == FR_OK)send_uart ("File1.txt created and the data is written \n");
 
-    	if (fresult == FR_OK)send_uart ("File1.txt created and the data is written \n");
+//     	/* Open file to read */
+//     	fresult = f_open(&fil, "file1.txt", FA_READ);
 
-    	/* Open file to read */
-    	fresult = f_open(&fil, "file1.txt", FA_READ);
+//     	/* Read string from the file */
+//     	f_gets(buffer, f_size(&fil), &fil);
 
-    	/* Read string from the file */
-    	f_gets(buffer, f_size(&fil), &fil);
+//     	send_uart("File1.txt is opened and it contains the data as shown below\n");
+//     	send_uart(buffer);
+//     	send_uart("\n\n");
 
-    	send_uart("File1.txt is opened and it contains the data as shown below\n");
-    	send_uart(buffer);
-    	send_uart("\n\n");
+//     	/* Close file */
+//     	f_close(&fil);
 
-    	/* Close file */
-    	f_close(&fil);
-
-    	clear_buffer();
-
-
-
-
-    	/**************** The following operation is using f_write and f_read **************************/
-
-    	/* Create second file with read write access and open it */
-    	fresult = f_open(&fil, "file2.txt", FA_CREATE_ALWAYS | FA_WRITE);
-
-    	/* Writing text */
-    	strcpy (buffer, "This is File2.txt, written using f_write and said Hello World\n");
-
-    	fresult = f_write(&fil, buffer, bufsize(buffer), &bw);
-
-    	send_uart ("File2.txt created and data is written\n");
-
-    	/* Close file */
-    	f_close(&fil);
+//     	clear_buffer();
 
 
 
-    	// clearing buffer to show that result obtained is from the file
-    	clear_buffer();
 
-    	/* Open second file to read */
-    	fresult = f_open(&fil, "file2.txt", FA_READ);
-    	if (fresult == FR_OK)send_uart ("file2.txt is open and the data is shown below\n");
+//     	/**************** The following operation is using f_write and f_read **************************/
 
-    	/* Read data from the file
-    	 * Please see the function details for the arguments */
-    	f_read (&fil, buffer, f_size(&fil), &br);
-    	send_uart(buffer);
-    	send_uart("\n\n");
+//     	/* Create second file with read write access and open it */
+//     	fresult = f_open(&fil, "file2.txt", FA_CREATE_ALWAYS | FA_WRITE);
 
-    	/* Close file */
-    	f_close(&fil);
+//     	/* Writing text */
+//     	strcpy (buffer, "This is File2.txt, written using f_write and said Hello World\n");
 
-    	clear_buffer();
+//     	fresult = f_write(&fil, buffer, bufsize(buffer), &bw);
+
+//     	send_uart ("File2.txt created and data is written\n");
+
+//     	/* Close file */
+//     	f_close(&fil);
 
 
-    	/*********************UPDATING an existing file ***************************/
 
-    	/* Open the file with write access */
-    	fresult = f_open(&fil, "file2.txt", FA_OPEN_EXISTING | FA_READ | FA_WRITE);
+//     	// clearing buffer to show that result obtained is from the file
+//     	clear_buffer();
 
-    	/* Move to offset to the end of the file */
-    	fresult = f_lseek(&fil, f_size(&fil));
+//     	/* Open second file to read */
+//     	fresult = f_open(&fil, "file2.txt", FA_READ);
+//     	if (fresult == FR_OK)send_uart ("file2.txt is open and the data is shown below\n");
 
-    	if (fresult == FR_OK)send_uart ("About to update the file2.txt\n");
+//     	/* Read data from the file
+//     	 * Please see the function details for the arguments */
+//     	f_read (&fil, buffer, f_size(&fil), &br);
+//     	send_uart(buffer);
+//     	send_uart("\n\n");
 
-    	/* write the string to the file */
-    	fresult = f_puts("This is updated data and it should be in the end", &fil);
+//     	/* Close file */
+//     	f_close(&fil);
 
-    	f_close (&fil);
+//     	clear_buffer();
 
-    	clear_buffer();
 
-    	/* Open to read the file */
-    	fresult = f_open (&fil, "file2.txt", FA_READ);
+//     	/*********************UPDATING an existing file ***************************/
 
-    	/* Read string from the file */
-    	fresult = f_read (&fil, buffer, f_size(&fil), &br);
-    	if (fresult == FR_OK)send_uart ("Below is the data from updated file2.txt\n");
-    	send_uart(buffer);
-    	send_uart("\n\n");
+//     	/* Open the file with write access */
+//     	fresult = f_open(&fil, "file2.txt", FA_OPEN_EXISTING | FA_READ | FA_WRITE);
 
-    	/* Close file */
-    	f_close(&fil);
+//     	/* Move to offset to the end of the file */
+//     	fresult = f_lseek(&fil, f_size(&fil));
 
-    	clear_buffer();
+//     	if (fresult == FR_OK)send_uart ("About to update the file2.txt\n");
 
-    	/*
+//     	/* write the string to the file */
+//     	fresult = f_puts("This is updated data and it should be in the end", &fil);
 
-    	/*************************REMOVING FILES FROM THE DIRECTORY ****************************/
-    	/*
-    	fresult = f_unlink("/file1.txt");
-    	if (fresult == FR_OK) send_uart("file1.txt removed successfully...\n");
+//     	f_close (&fil);
 
-    	fresult = f_unlink("/file2.txt");
-    	if (fresult == FR_OK) send_uart("file2.txt removed successfully...\n");
+//     	clear_buffer();
 
-    	/* Unmount SDCARD */
-    	/*
-    	fresult = f_mount(NULL, "/", 1);
-    	if (fresult == FR_OK) send_uart ("SD CARD UNMOUNTED successfully...\n");
-    	*/
-    /****************CREATE A NEW SUB DIR************* */
+//     	/* Open to read the file */
+//     	fresult = f_open (&fil, "file2.txt", FA_READ);
+
+//     	/* Read string from the file */
+//     	fresult = f_read (&fil, buffer, f_size(&fil), &br);
+//     	if (fresult == FR_OK)send_uart ("Below is the data from updated file2.txt\n");
+//     	send_uart(buffer);
+//     	send_uart("\n\n");
+
+//     	/* Close file */
+//     	f_close(&fil);
+
+//     	clear_buffer();
+
+//     	/*
+
+//     	/*************************REMOVING FILES FROM THE DIRECTORY ****************************/
+//     	/*
+//     	fresult = f_unlink("/file1.txt");
+//     	if (fresult == FR_OK) send_uart("file1.txt removed successfully...\n");
+
+//     	fresult = f_unlink("/file2.txt");
+//     	if (fresult == FR_OK) send_uart("file2.txt removed successfully...\n");
+
+//     	/* Unmount SDCARD */
+//     	/*
+//     	fresult = f_mount(NULL, "/", 1);
+//     	if (fresult == FR_OK) send_uart ("SD CARD UNMOUNTED successfully...\n");
+//     	*/
+//     /****************CREATE A NEW SUB DIR************* */
     
 
-    
+    fresult = f_mount(&fs, "/", 1);
+      	if (fresult != FR_OK) send_uart ("ERROR in mounting SD CARD...\n\n");
+      	else send_uart("SD CARD mounted successfully...\n\n");
 
+
+      	/*************** Card capacity details ********************/
+
+      	/* Check free space */
+      	f_getfree("", &fre_clust, &pfs);
+
+      	total = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
+      	sprintf (buffer, "SD CARD Total Size: \t%lu\n",total);
+      	send_uart(buffer);
+      	clear_buffer();
+      	free_space = (uint32_t)(fre_clust * pfs->csize * 0.5);
+      	sprintf (buffer, "SD CARD Free Space: \t%lu\n\n",free_space);
+      	send_uart(buffer);
+      	clear_buffer();
+//
+//    	/* Open the file with write access */
+//        	fresult = f_open(&fil, "file2.txt", FA_OPEN_EXISTING | FA_READ | FA_WRITE);
+//
+//        	/* Move to offset to the end of the file */
+//        	fresult = f_lseek(&fil, f_size(&fil));
+//
+//        	if (fresult == FR_OK)send_uart ("About to update the file2.txt\n");
+//
+//        	/* write the string to the file */
+//        	fresult = f_puts("This is updated data and it should be in the end", &fil);
+//
+//        	f_close (&fil);
+//
+//        	clear_buffer();
 
   /* USER CODE END 2 */
-
-  // Test tạo thư mục mới
-  SD_creatSubDir("testdir");
-  send_uart("Đã tạo thư mục testdir\n");
-
-  // Test liệt kê file/thư mục
-  send_uart("Danh sách file/thư mục trên thẻ SD:\n");
-  SD_List_File();
-  send_uart("\n");
-/*
-  // Test xóa thư mục vừa tạo
-  SD_deleteFolder("testdir");
-  send_uart("Đã xóa thư mục testdir\n");
-
-  /*
-  // Liệt kê lại để kiểm tra
-  send_uart("Danh sách file/thư mục sau khi xóa testdir:\n");
-  SD_List_File();
-  send_uart("\n");
-  */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -425,6 +450,92 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+
+	  send_uart("==== SD Card Menu ====\r\n");
+	       send_uart("0. Stop program\r\n");
+	       send_uart("1. List files\r\n");
+	       send_uart("2. Create directory\r\n");
+	       send_uart("3. Delete directory\r\n");
+	       send_uart("4. Create file \r\n");
+	       send_uart("5. Delete file\r\n");
+	       send_uart("6. Update an existing file\r\n");
+	       send_uart("Please enter option number: ");
+
+	       char opt = uart_receive_char();
+
+	       switch (opt) {
+	           case '0':
+	               send_uart("Stopping program.\r\n");
+	               while(1); // Dừng chương trình
+	               break;
+	           case '1':
+	               send_uart("Files on SD card:\r\n");
+	               SD_List_File();
+	               break;
+	           case '2':
+	               send_uart("Please enter directory name: ");
+	               uart_receive_string(namebuf, sizeof(namebuf));
+	               SD_creatSubDir(namebuf);
+	               send_uart("Directory created!\r\n");
+	               break;
+	           case '3':
+	               send_uart("Please enter directory name to delete: ");
+	               uart_receive_string(namebuf, sizeof(namebuf));
+	               SD_deleteFolder(namebuf);
+	               send_uart("Directory deleted!\r\n");
+	               break;
+	           case '4':
+	               send_uart("Please enter file name to create: ");
+	               uart_receive_string(namebuf, sizeof(namebuf));
+	               fres = f_open(&fil, namebuf, FA_CREATE_ALWAYS | FA_WRITE);
+	               if (fres == FR_OK) {
+	                   send_uart("Enter content (end with !):\r\n");
+
+	                   uart_receive_string(filebuf, sizeof(filebuf));
+	                   fres = f_write(&fil, filebuf, bufsize(filebuf), &bw);
+	                   if (fres == FR_OK) send_uart("File created and written!\r\n");
+	                   else send_uart("Failed to write file!\r\n");
+	                   f_close(&fil);
+	               } else {
+	                   send_uart("Failed to create file!\r\n");
+	               }
+	               break;
+	           case '5':
+	               send_uart("Please enter file name to delete: ");
+	               uart_receive_string(namebuf, sizeof(namebuf));
+	               char pathbuf[64] = {0};
+                 snprintf(pathbuf, sizeof(pathbuf), "/%s", namebuf);
+	               fres = f_unlink(pathbuf);
+	               if (fres == FR_OK) send_uart("File deleted!\r\n");
+	               else send_uart("Failed to delete file!\r\n");
+	               break;
+
+
+	           case '6':
+	               send_uart("Please enter file name to update: ");
+	               uart_receive_string(namebuf, sizeof(namebuf));
+	               fres = f_open(&fil, namebuf, FA_OPEN_EXISTING | FA_WRITE | FA_READ);
+	               if (fres == FR_OK) {
+	                   f_lseek(&fil, f_size(&fil));
+	                   memset(filebuf, '0', sizeof(filebuf));
+	                   send_uart("Enter content to append (end with !):\r\n");
+
+	                   uart_receive_string(filebuf, sizeof(filebuf));
+	                   fres = f_puts(filebuf, &fil);
+	                   //f_close(&fil);
+//	                   if (fres == FR_OK)
+//	                   {send_uart("File updated!\r\n");}
+//	                   else
+//	                   {send_uart("Failed to update file!\r\n");}
+	                   f_close(&fil);
+	               } else {
+	                   send_uart("Failed to open file for update!\r\n");
+	               }
+	               break;
+	           default:
+	               send_uart("Invalid option!\r\n");
+	               break;
+	       }
 
     /* USER CODE BEGIN 3 */
   }

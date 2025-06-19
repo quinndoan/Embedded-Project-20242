@@ -1,9 +1,9 @@
-21:22:35 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
+23:58:36 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
 make -j16 all 
 arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F429xx -c -I../Core/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -I../FATFS/Target -I../FATFS/App -I../USB_DEVICE/App -I../USB_DEVICE/Target -I../Middlewares/Third_Party/FatFs/src -I../Middlewares/ST/STM32_USB_Device_Library/Core/Inc -I../Middlewares/ST/STM32_USB_Device_Library/Class/MSC/Inc -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
 ../Core/Src/main.c: In function 'send_uart':
-../Core/Src/main.c:94:29: warning: pointer targets in passing argument 2 of 'HAL_UART_Transmit' differ in signedness [-Wpointer-sign]
-   94 |   HAL_UART_Transmit(&huart1,(char*) buf1, sizeof(buf1), 2000);
+../Core/Src/main.c:99:29: warning: pointer targets in passing argument 2 of 'HAL_UART_Transmit' differ in signedness [-Wpointer-sign]
+   99 |   HAL_UART_Transmit(&huart1,(char*) buf1, sizeof(buf1), 2000);
       |                             ^~~~~~~~~~~~
       |                             |
       |                             char *
@@ -15,36 +15,26 @@ In file included from ../Core/Inc/stm32f4xx_hal_conf.h:411,
   745 | HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *huart, const uint8_t *pData, uint16_t Size, uint32_t Timeout);
       |                                                                ~~~~~~~~~~~~~~~^~~~~
 ../Core/Src/main.c: In function 'main':
-../Core/Src/main.c:178:1: warning: "/*" within comment [-Wcomment]
-  178 | /*
+../Core/Src/main.c:208:1: warning: "/*" within comment [-Wcomment]
+  208 | /* Open file to write */
       |  
-../Core/Src/main.c:194:1: warning: "/*" within comment [-Wcomment]
-  194 | /* Open file to write */
-      |  
-../Core/Src/main.c:381:9: warning: "/*" within comment [-Wcomment]
-  381 |         /*************************REMOVING FILES FROM THE DIRECTORY ****************************/
+../Core/Src/main.c:279:9: warning: "/*" within comment [-Wcomment]
+  279 | //      /*************** Card capacity details ********************/
       |          
-../Core/Src/main.c:389:9: warning: "/*" within comment [-Wcomment]
-  389 |         /* Unmount SDCARD */
-      |          
-../Core/Src/main.c:415:3: warning: "/*" within comment [-Wcomment]
-  415 |   /*
-      |    
+../Core/Src/main.c:507:55: warning: '%s' directive output may be truncated writing up to 127 bytes into a region of size 63 [-Wformat-truncation=]
+  507 |                  snprintf(pathbuf, sizeof(pathbuf), "/%s", namebuf);
+      |                                                       ^~   ~~~~~~~
+../Core/Src/main.c:507:18: note: 'snprintf' output between 2 and 129 bytes into a destination of size 64
+  507 |                  snprintf(pathbuf, sizeof(pathbuf), "/%s", namebuf);
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 arm-none-eabi-gcc -o "STM32_20242_ReadFile.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\Embedded-Project-20242\STM32_20242_ReadFile\STM32F429ZITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32_20242_ReadFile.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 Finished building target: STM32_20242_ReadFile.elf
  
 arm-none-eabi-size  STM32_20242_ReadFile.elf 
 arm-none-eabi-objdump -h -S STM32_20242_ReadFile.elf  > "STM32_20242_ReadFile.list"
    text	   data	    bss	    dec	    hex	filename
-  65904	    356	  20180	  86440	  151a8	STM32_20242_ReadFile.elf
+  69388	    356	  21332	  91076	  163c4	STM32_20242_ReadFile.elf
 Finished building: default.size.stdout
  
 Finished building: STM32_20242_ReadFile.list
- 
-21:22:44 **** Incremental Build of configuration Debug for project STM32_20242_ReadFile ****
-make -j16 all 
-arm-none-eabi-size  STM32_20242_ReadFile.elf 
-   text	   data	    bss	    dec	    hex	filename
-  65904	    356	  20180	  86440	  151a8	STM32_20242_ReadFile.elf
-Finished building: default.size.stdout
  

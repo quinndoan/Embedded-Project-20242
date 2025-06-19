@@ -7,3 +7,5 @@
 1750087192197	Delete resource 'STM32_Try2/FATFS/Target/user_diskio.c'
 1750087195954	Delete resource 'STM32_Try2/FATFS/Target/user_diskio.h'
 1750087200317	Delete resource 'STM32_Try2/FATFS/App/fatfs.h'
+1750344949990	Delete resource 'STM32_20242_ReadFile/FATFS/App/fatfs.c'
+1750344959824	Delete resource 'STM32_20242_ReadFile/Middlewares/Third_Party/FatFs/src/diskio.c'
