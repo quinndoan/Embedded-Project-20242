@@ -5,13 +5,27 @@
 #include "stm32f4xx_hal.h"
 #include "diskio.h"
 #include "fatfs_sd.h"
-
+#include "ff.h"
+#include "string.h"
 
 extern SPI_HandleTypeDef 	hspi1;
 #define HSPI_SDCARD		 	&hspi1
 #define	SD_CS_PORT			GPIOC
 #define SD_CS_PIN			GPIO_PIN_4
 
+char USER_Path[4];   /* USER logical drive path */
+FATFS SDFatFs; //File system object structure (FATFS)
+FILINFO fileInfo;	/* File information structure (FILINFO) */
+uint8_t sect[512];
+
+uint8_t result;
+uint16_t i;
+//------------------------------------------------------List file
+FRESULT res; //result
+char *fn;
+	//char *fn;
+DIR dir;  /* Directory object structure (DIR) */
+extern UART_HandleTypeDef huart1;
 extern volatile uint16_t Timer1, Timer2, Timer3,Timer4;					/* 1ms Timer Counter */ // giải thích ý nghĩa cần các timer
 
 static volatile DSTATUS Stat = STA_NOINIT;	/* Disk Status */		// giải thích các kiểu volatile, static, uint
@@ -547,4 +561,143 @@ DRESULT SD_disk_ioctl(BYTE drv, BYTE ctrl, void *buff)
 	}
 
 	return res;
+}
+
+/* List- File Function */
+
+void SD_List_File(void){
+	if(f_mount(&SDFatFs,(TCHAR const*)USER_Path,0)!=FR_OK)
+	{
+		Error_Handler();
+	}
+	else
+	{
+		strcpy(fileInfo.fname, (char*)sect);
+		//fileInfo.fname = (char*)sect;
+		fileInfo.fsize = sizeof(sect);
+		result = f_opendir(&dir, "/");
+		//Liet ke danh sach tep tin co trong sd card
+		if (result == FR_OK)
+		{
+			while(1)
+			{
+				result = f_readdir(&dir, &fileInfo);
+				if (result==FR_OK && fileInfo.fname[0])
+				{
+					fn = fileInfo.fname; // Pointer to the LFN buffer
+					//khi truyen buffer vao HAL_UART thi truyen vao dia chi dau tien cua mang se liet ke het danh sach cac file co trong SD
+					if(strlen(fn)) HAL_UART_Transmit(&huart1,(uint8_t*)fn,strlen(fn),0x1000);
+					else HAL_UART_Transmit(&huart1,(uint8_t*)fileInfo.fname,strlen((char*)fileInfo.fname),0x1000);
+					if(fileInfo.fattrib&AM_DIR)
+					{
+						HAL_UART_Transmit(&huart1,(uint8_t*)"  [DIR]",7,0x1000);
+					}
+				}
+				else break;
+				HAL_UART_Transmit(&huart1,(uint8_t*)"\r\n",2,0x1000);
+			}
+			f_closedir(&dir);
+		}
+	}
+}
+/* Hàm tạo thư mục */
+
+void SD_creatSubDir(char* filename)
+{
+	if(f_mount(&SDFatFs,(TCHAR const*)USER_Path,0)!=FR_OK)
+	{
+		Error_Handler();
+	}
+	else
+	{
+		res = f_stat(filename,&fileInfo);
+		switch(res)
+		{
+			case FR_OK:
+				break;
+			case FR_NO_FILE:
+				res = f_mkdir(filename);
+				if(res != FR_OK) Error_Handler();
+				break;
+			default:
+				Error_Handler();
+		}
+	}
+}
+
+/* Hàm này xóa được sub dir, chứa cả file lẫn folder
+*/
+FRESULT delete_node (
+    TCHAR* path,    /* Path name buffer with the sub-directory to delete */
+    UINT sz_buff,   /* Size of path name buffer (items) */
+    FILINFO* fno    /* Name read buffer */
+)
+{
+    UINT i, j;
+    FRESULT fr;
+    DIR dir;
+
+
+    fr = f_opendir(&dir, path); /* Open the directory */
+    if (fr != FR_OK) return fr;
+
+    for (i = 0; path[i]; i++) ; /* Get current path length */
+    path[i++] = _T('/');
+
+    for (;;) {
+        fr = f_readdir(&dir, fno);  /* Get a directory item */
+        if (fr != FR_OK || !fno->fname[0]) break;   /* End of directory? */
+        j = 0;
+        do {    /* Make a path name */
+            if (i + j >= sz_buff) { /* Buffer over flow? */
+                fr = 100; break;    /* Fails with 100 when buffer overflow */
+            }
+            path[i + j] = fno->fname[j];
+        } while (fno->fname[j++]);
+        if (fno->fattrib & AM_DIR) {    /* Item is a directory */
+            fr = delete_node(path, sz_buff, fno);
+        } else {                        /* Item is a file */
+            fr = f_unlink(path);
+        }
+        if (fr != FR_OK) break;
+    }
+
+    path[--i] = 0;  /* Restore the path name */
+    f_closedir(&dir);
+
+    if (fr == FR_OK) fr = f_unlink(path);  /* Delete the empty directory */
+    return fr;
+}
+//-------------------------------------------------- Ham xoa thu muc
+void SD_deleteFolder(char* foldername)
+{
+	TCHAR buff[256];
+	if(f_mount(&SDFatFs,(TCHAR const*)USER_Path,0)!=FR_OK)
+	{
+		Error_Handler();
+	}
+	else
+	{
+		char path[50] = {0};
+		strcpy(path,"0:");
+		strcat(path,foldername);
+		res = f_opendir(&dir, path);
+		if (res != FR_OK)
+		{
+			Error_Handler();
+		}
+		else
+		{
+			res = delete_node(path,sizeof(buff),&fileInfo);
+			/* Check the result */
+			if(res == FR_OK)
+			{
+				send_uart("The directory and its contents have successfully been deleted\r\n");
+			}
+			else
+			{
+				send_uart("Failed to delete the directory\r\n");
+			}
+		}
+	}
 }

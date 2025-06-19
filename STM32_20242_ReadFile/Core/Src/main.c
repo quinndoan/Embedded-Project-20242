@@ -60,7 +60,9 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+void SD_List_File(void);
+void SD_creatSubDir(char* filename);
+void SD_deleteFolder(char* foldername);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -389,8 +391,33 @@ int main(void)
     	fresult = f_mount(NULL, "/", 1);
     	if (fresult == FR_OK) send_uart ("SD CARD UNMOUNTED successfully...\n");
     	*/
+    /****************CREATE A NEW SUB DIR************* */
+    
+
+    
+
 
   /* USER CODE END 2 */
+
+  // Test tạo thư mục mới
+  SD_creatSubDir("testdir");
+  send_uart("Đã tạo thư mục testdir\n");
+
+  // Test liệt kê file/thư mục
+  send_uart("Danh sách file/thư mục trên thẻ SD:\n");
+  SD_List_File();
+  send_uart("\n");
+/*
+  // Test xóa thư mục vừa tạo
+  SD_deleteFolder("testdir");
+  send_uart("Đã xóa thư mục testdir\n");
+
+  /*
+  // Liệt kê lại để kiểm tra
+  send_uart("Danh sách file/thư mục sau khi xóa testdir:\n");
+  SD_List_File();
+  send_uart("\n");
+  */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
