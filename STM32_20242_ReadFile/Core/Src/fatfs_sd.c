@@ -86,6 +86,8 @@ static void SPI_RxBytePtr(uint8_t *buff)
 /*************************************************
  * 2. HÀM QUẢN LÝ NGUỒN & TRẠNG THÁI THẺ SD
  *************************************************/
+
+/* wait SD ready */
 static uint8_t SD_ReadyWait(void)
 {
 	uint8_t res;
@@ -154,6 +156,8 @@ static uint8_t SD_CheckPower(void)
 /********************************************
  * 3. HÀM TRUYỀN/NHẬN DỮ LIỆU VỚI THẺ SD
  ********************************************/
+ 
+ /* receive data block */
 static uint8_t SD_RxDataBlock(uint8_t *buff, unsigned int len)
 {
 	uint8_t token;
