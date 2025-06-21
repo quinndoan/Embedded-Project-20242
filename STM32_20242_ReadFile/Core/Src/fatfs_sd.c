@@ -1,7 +1,8 @@
 #define TRUE  1
 #define FALSE 0
-#define bool BYTE
+#define bool uint8_t
 
+#include <stdint.h>
 #include "stm32f4xx_hal.h"
 #include "diskio.h"
 #include "fatfs_sd.h"
@@ -153,7 +154,7 @@ static uint8_t SD_CheckPower(void)
 }
 
 /* receive data block */
-static bool SD_RxDataBlock(BYTE *buff, UINT len)
+static uint8_t SD_RxDataBlock(uint8_t *buff, unsigned int len)
 {
 	uint8_t token;
 
@@ -182,7 +183,7 @@ static bool SD_RxDataBlock(BYTE *buff, UINT len)
 
 /* transmit data block */
 #if _USE_WRITE == 1
-static bool SD_TxDataBlock(const uint8_t *buff, BYTE token)
+static uint8_t SD_TxDataBlock(const uint8_t *buff, uint8_t token)
 {
 	uint8_t resp;
 	uint8_t i = 0;
@@ -225,7 +226,7 @@ static bool SD_TxDataBlock(const uint8_t *buff, BYTE token)
 #endif /* _USE_WRITE */
 
 /* transmit command */
-static BYTE SD_SendCmd(BYTE cmd, uint32_t arg)
+static uint8_t SD_SendCmd(uint8_t cmd, uint32_t arg)
 {
 	uint8_t crc, res;
 
@@ -264,7 +265,7 @@ static BYTE SD_SendCmd(BYTE cmd, uint32_t arg)
  **************************************/
 
 /* initialize SD */
-DSTATUS SD_disk_initialize(BYTE drv) 
+DSTATUS SD_disk_initialize(uint8_t drv) 
 {
 	uint8_t n, type, ocr[4];
 
@@ -364,14 +365,14 @@ DSTATUS SD_disk_initialize(BYTE drv)
 }
 
 /* return disk status */
-DSTATUS SD_disk_status(BYTE drv) 
+DSTATUS SD_disk_status(uint8_t drv) 
 {
 	if (drv) return STA_NOINIT;
 	return Stat;
 }
 
 /* read sector */
-DRESULT SD_disk_read(BYTE pdrv, BYTE* buff, DWORD sector, UINT count) 
+DRESULT SD_disk_read(uint8_t pdrv, uint8_t* buff, uint32_t sector, unsigned int count) 
 {
 	/* pdrv should be 0 */
 	if (pdrv || !count) return RES_PARERR;
@@ -413,7 +414,7 @@ DRESULT SD_disk_read(BYTE pdrv, BYTE* buff, DWORD sector, UINT count)
 
 /* write sector */
 #if _USE_WRITE == 1
-DRESULT SD_disk_write(BYTE pdrv, const BYTE* buff, DWORD sector, UINT count) 
+DRESULT SD_disk_write(uint8_t pdrv, const uint8_t* buff, uint32_t sector, unsigned int count) 
 {
 	/* pdrv should be 0 */
 	if (pdrv || !count) return RES_PARERR;
@@ -468,11 +469,11 @@ DRESULT SD_disk_write(BYTE pdrv, const BYTE* buff, DWORD sector, UINT count)
 #endif /* _USE_WRITE */
 
 /* ioctl */
-DRESULT SD_disk_ioctl(BYTE drv, BYTE ctrl, void *buff) 
+DRESULT SD_disk_ioctl(uint8_t drv, uint8_t ctrl, void *buff) 
 {
 	DRESULT res;
 	uint8_t n, csd[16], *ptr = buff;
-	WORD csize;
+	uint16_t csize;
 
 	/* pdrv should be 0 */
 	if (drv) return RES_PARERR;
