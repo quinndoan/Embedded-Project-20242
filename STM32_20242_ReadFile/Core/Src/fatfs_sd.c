@@ -33,10 +33,10 @@ static volatile DSTATUS Stat = STA_NOINIT;	/* Disk Status */		// giải thích c
 static uint8_t CardType;                    /* Type 0:MMC, 1:SDC, 2:Block addressing */
 static uint8_t PowerFlag = 0;				/* Power flag */
 
-/***************************************
- * SPI functions
- **************************************/
-
+/********************************************
+ * 1. HÀM SPI (Giao tiếp SPI với thẻ SD)
+ ********************************************/
+ 
 /* slave select */
 static void SELECT(void)
 {
@@ -83,11 +83,9 @@ static void SPI_RxBytePtr(uint8_t *buff)
 	*buff = SPI_RxByte();
 }
 
-/***************************************
- * SD functions
- **************************************/
-
-/* wait SD ready */
+/*************************************************
+ * 2. HÀM QUẢN LÝ NGUỒN & TRẠNG THÁI THẺ SD
+ *************************************************/
 static uint8_t SD_ReadyWait(void)
 {
 	uint8_t res;
@@ -153,7 +151,9 @@ static uint8_t SD_CheckPower(void)
 	return PowerFlag;
 }
 
-/* receive data block */
+/********************************************
+ * 3. HÀM TRUYỀN/NHẬN DỮ LIỆU VỚI THẺ SD
+ ********************************************/
 static uint8_t SD_RxDataBlock(uint8_t *buff, unsigned int len)
 {
 	uint8_t token;
@@ -260,9 +260,9 @@ static uint8_t SD_SendCmd(uint8_t cmd, uint32_t arg)
 	return res;
 }
 
-/***************************************
- * user_diskio.c functions
- **************************************/
+/********************************************
+ * 4. HÀM GIAO TIẾP VỚI FATFS (DISKIO)
+ ********************************************/
 
 /* initialize SD */
 DSTATUS SD_disk_initialize(uint8_t drv) 
@@ -563,6 +563,10 @@ DRESULT SD_disk_ioctl(uint8_t drv, uint8_t ctrl, void *buff)
 
 	return res;
 }
+
+/********************************************
+ * 5. HÀM THAO TÁC FILE/THƯ MỤC MỨC CAO
+ ********************************************/
 
 /* List- File Function */
 
