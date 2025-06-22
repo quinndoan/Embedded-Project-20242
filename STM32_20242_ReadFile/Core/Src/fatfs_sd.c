@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_spi.h"
 #include "diskio.h"
 #include "fatfs_sd.h"
 #include "ff.h"
@@ -234,217 +235,218 @@ static uint8_t SD_SendCmd(uint8_t cmd, uint32_t arg)
  * 4. HÀM GIAO TIẾP VỚI FATFS (DISKIO)
  ********************************************/
 
-/* initialize SD */
+/* Khởi tạo thẻ SD - phát hiện loại thẻ và chuẩn bị sử dụng */
 DSTATUS SD_disk_initialize(uint8_t drv) 
 {
 	uint8_t n, type, ocr[4];
 
-	/* single drive, drv should be 0 */
+	/* Chỉ hỗ trợ drive 0 */
 	if(drv) return STA_NOINIT;
 
-	/* no disk */
+	/* Kiểm tra có thẻ không */
 	if(Stat & STA_NODISK) return Stat;
 
-	/* power on */
+	/* Bật nguồn thẻ */
 	SD_PowerOn();
 
-	/* slave select */
+	/* Chọn thẻ */
 	SELECT();
 
-	/* check disk type */
+	/* Khởi tạo biến loại thẻ */
 	type = 0;
 
-	/* send GO_IDLE_STATE command */
+	/* Gửi CMD0 để reset thẻ về trạng thái idle */
 	if (SD_SendCmd(CMD0, 0) == 1)
 	{
-		/* timeout 1 sec */
+		/* Timeout 1 giây cho quá trình khởi tạo */
 		Timer1 = 100;
 
-		/* SDC V2+ accept CMD8 command*/
+		/* Kiểm tra SD V2+ bằng CMD8 */
 		if (SD_SendCmd(CMD8, 0x1AA) == 1)
 		{
-			/* operation condition register */
+			/* Đọc OCR register (4 bytes) */
 			for (n = 0; n < 4; n++)
 			{
 				ocr[n] = SPI_RxByte();
 			}
 
-			/* voltage range 2.7-3.6V */
+			/* Kiểm tra voltage 2.7-3.6V và check pattern */
 			if (ocr[2] == 0x01 && ocr[3] == 0xAA)
 			{
-				/* ACMD41 with HCS bit */
+				/* Khởi tạo SD V2+ với ACMD41 (HCS=1 hỗ trợ SDHC) */
 				do {
 					if (SD_SendCmd(CMD55, 0) <= 1 && SD_SendCmd(CMD41, 1UL << 30) == 0) break;
 				} while (Timer1);
 
-				/* READ_OCR */
+				/* Đọc OCR để kiểm tra CCS bit */
 				if (Timer1 && SD_SendCmd(CMD58, 0) == 0)
 				{
-					/* Check CCS bit */
+					/* Đọc OCR */
 					for (n = 0; n < 4; n++)
 					{
 						ocr[n] = SPI_RxByte();
 					}
 
-					/* SDv2 (HC or SC) */
+					/* Phân loại: SDHC/SDXC (block) hoặc SDSC (byte) */
 					type = (ocr[0] & 0x40) ? CT_SD2 | CT_BLOCK : CT_SD2;
 				}
 			}
 		}
 		else
 		{
-			/* SDC V1 or MMC */
+			/* Phân biệt SD V1 và MMC bằng CMD55 */
 			type = (SD_SendCmd(CMD55, 0) <= 1 && SD_SendCmd(CMD41, 0) <= 1) ? CT_SD1 : CT_MMC;
 
+			/* Khởi tạo theo loại thẻ */
 			do
 			{
 				if (type == CT_SD1)
 				{
-					if (SD_SendCmd(CMD55, 0) <= 1 && SD_SendCmd(CMD41, 0) == 0) break; /* ACMD41 */
+					if (SD_SendCmd(CMD55, 0) <= 1 && SD_SendCmd(CMD41, 0) == 0) break; /* SD V1 dùng ACMD41 */
 				}
 				else
 				{
-					if (SD_SendCmd(CMD1, 0) == 0) break; /* CMD1 */
+					if (SD_SendCmd(CMD1, 0) == 0) break; /* MMC dùng CMD1 */
 				}
 
 			} while (Timer1);
 
-			/* SET_BLOCKLEN */
+			/* Thiết lập block size = 512 byte cho SD V1/MMC */
 			if (!Timer1 || SD_SendCmd(CMD16, 512) != 0) type = 0;
 		}
 	}
 
+	/* Lưu loại thẻ */
 	CardType = type;
 
-	/* Idle */
+	/* Bỏ chọn thẻ */
 	DESELECT();
 	SPI_RxByte();
 
-	/* Clear STA_NOINIT */
+	/* Cập nhật trạng thái */
 	if (type)
 	{
-		Stat &= ~STA_NOINIT;
+		Stat &= ~STA_NOINIT; /* Khởi tạo thành công */
 	}
 	else
 	{
-		/* Initialization failed */
-		SD_PowerOff();
+		SD_PowerOff(); /* Khởi tạo thất bại */
 	}
 
 	return Stat;
 }
 
-/* return disk status */
+/* Trả về trạng thái thẻ SD */
 DSTATUS SD_disk_status(uint8_t drv) 
 {
 	if (drv) return STA_NOINIT;
 	return Stat;
 }
 
-/* read sector */
+/* Đọc sector từ thẻ SD */
 DRESULT SD_disk_read(uint8_t pdrv, uint8_t* buff, uint32_t sector, unsigned int count) 
 {
-	/* pdrv should be 0 */
+	/* Kiểm tra tham số */
 	if (pdrv || !count) return RES_PARERR;
 
-	/* no disk */
+	/* Kiểm tra thẻ đã khởi tạo chưa */
 	if (Stat & STA_NOINIT) return RES_NOTRDY;
 
-	/* convert to byte address */
+	/* Chuyển địa chỉ sector thành byte cho SD V1/MMC */
 	if (!(CardType & CT_SD2)) sector *= 512;
 
 	SELECT();
 
 	if (count == 1)
 	{
-		/* READ_SINGLE_BLOCK */
+		/* Đọc 1 block bằng CMD17 */
 		if (SD_SendCmd(CMD17, sector) == 0) {
 			if (SD_RxDataBlock(buff, 512)) {
-				count = 0;
+				count = 0; /* Thành công */
 			} else {
-				count = 1; // Data block read failed
+				count = 1; /* Lỗi đọc data */
 			}
 		} else {
-			count = 1; // Command failed
+			count = 1; /* Lỗi gửi lệnh */
 		}
 	}
 	else
 	{
-		/* READ_MULTIPLE_BLOCK */
+		/* Đọc nhiều block bằng CMD18 */
 		if (SD_SendCmd(CMD18, sector) == 0)
 		{
 			do {
 				if (!SD_RxDataBlock(buff, 512)) break;
-				buff += 512;
+				buff += 512; /* Tăng buffer pointer */
 			} while (--count);
 
-			/* STOP_TRANSMISSION */
+			/* Dừng truyền */
 			SD_SendCmd(CMD12, 0);
 		}
 	}
 
-	/* Idle */
+	/* Bỏ chọn thẻ */
 	DESELECT();
 	SPI_RxByte();
 
 	return count ? RES_ERROR : RES_OK;
 }
 
-/* write sector */
+/* Ghi sector vào thẻ SD */
 #if _USE_WRITE == 1
 DRESULT SD_disk_write(uint8_t pdrv, const uint8_t* buff, uint32_t sector, unsigned int count) 
 {
-	/* pdrv should be 0 */
+	/* Kiểm tra tham số */
 	if (pdrv || !count) return RES_PARERR;
 
-	/* no disk */
+	/* Kiểm tra thẻ đã khởi tạo chưa */
 	if (Stat & STA_NOINIT) return RES_NOTRDY;
 
-	/* write protection */
+	/* Kiểm tra write protection */
 	if (Stat & STA_PROTECT) return RES_WRPRT;
 
-	/* convert to byte address */
+	/* Chuyển địa chỉ sector thành byte cho SD V1/MMC */
 	if (!(CardType & CT_SD2)) sector *= 512;
 
 	SELECT();
 
 	if (count == 1)
 	{
-		/* WRITE_BLOCK */
+		/* Ghi 1 block bằng CMD24 */
 		if ((SD_SendCmd(CMD24, sector) == 0) && SD_TxDataBlock(buff, 0xFE))
-			count = 0;
+			count = 0; /* Thành công */
 	}
 	else
 	{
-		/* WRITE_MULTIPLE_BLOCK */
+		/* Ghi nhiều block bằng CMD25 */
 		if (CardType & CT_SD1)
 		{
 			SD_SendCmd(CMD55, 0);
-			SD_SendCmd(CMD23, count); /* ACMD23 */
+			SD_SendCmd(CMD23, count); /* Pre-erase cho SD V1 */
 		}
 
 		if (SD_SendCmd(CMD25, sector) == 0)
 		{
 			do {
-				if(!SD_TxDataBlock(buff, 0xFC)) break;
-				buff += 512;
+				if(!SD_TxDataBlock(buff, 0xFC)) break; /* Multi-block token */
+				buff += 512; /* Tăng buffer pointer */
 			} while (--count);
 
-			/* STOP_TRAN token */
+			/* Gửi stop token */
 			if(!SD_TxDataBlock(0, 0xFD))
 			{
-				count = 1;
+				count = 1; /* Lỗi stop */
 			}
 		}
 	}
 
-	/* Idle */
+	/* Bỏ chọn thẻ */
 	DESELECT();
 	SPI_RxByte();
 
 	return count ? RES_ERROR : RES_OK;
 }
-#endif /* _USE_WRITE */
+#endif
 
 /* ioctl */
 DRESULT SD_disk_ioctl(uint8_t drv, uint8_t ctrl, void *buff) 
