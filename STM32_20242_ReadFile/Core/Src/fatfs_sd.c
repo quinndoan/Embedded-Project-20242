@@ -9,146 +9,120 @@
 #include "ff.h"
 #include "string.h"
 
-extern SPI_HandleTypeDef 	hspi1;
-#define HSPI_SDCARD		 	&hspi1
-#define	SD_CS_PORT			GPIOC
-#define SD_CS_PIN			GPIO_PIN_4
+extern SPI_HandleTypeDef hspi1;
+#define HSPI_SDCARD &hspi1
+#define SD_CS_PORT GPIOC
+#define SD_CS_PIN GPIO_PIN_4
 
-char USER_Path[4];   /* USER logical drive path */
-FATFS SDFatFs; //File system object structure (FATFS)
-FILINFO fileInfo;	/* File information structure (FILINFO) */
+char USER_Path[4];   // Đường dẫn ổ đĩa logic
+FATFS SDFatFs;       // Đối tượng hệ thống file FATFS
+FILINFO fileInfo;    // Thông tin file
 uint8_t sect[512];
 
 uint8_t result;
 uint16_t i;
-//------------------------------------------------------List file
-FRESULT res; //result
+FRESULT res;
 char *fn;
-	//char *fn;
-DIR dir;  /* Directory object structure (DIR) */
+DIR dir;
 extern UART_HandleTypeDef huart1;
-extern volatile uint16_t Timer1, Timer2, Timer3,Timer4;					/* 1ms Timer Counter */ // giải thích ý nghĩa cần các timer
+extern volatile uint16_t Timer1, Timer2, Timer3, Timer4; // Bộ đếm thời gian 1ms
 
-static volatile DSTATUS Stat = STA_NOINIT;	/* Disk Status */		// giải thích các kiểu volatile, static, uint
-static uint8_t CardType;                    /* Type 0:MMC, 1:SDC, 2:Block addressing */
-static uint8_t PowerFlag = 0;				/* Power flag */
+static volatile DSTATUS Stat = STA_NOINIT; // Trạng thái thẻ SD
+static uint8_t CardType;                   // Loại thẻ: 0:MMC, 1:SDC, 2:Block addressing
+static uint8_t PowerFlag = 0;              // Cờ nguồn thẻ SD
 
 /********************************************
- * 1. HÀM SPI (Giao tiếp SPI với thẻ SD)
+ * 1. HÀM SPI GIAO TIẾP VỚI THẺ SD
  ********************************************/
- 
-/* slave select */
+
+// Kéo chân CS (Chip Select) xuống mức thấp
 static void SELECT(void)
 {
-	//HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_RESET);	// không cần thiết vì ở đây chỉ có 1 slave
 	HAL_Delay(1);
 }
 
-/* slave deselect */
+// Đưa chân CS lên mức cao
 static void DESELECT(void)
 {
-	//HAL_GPIO_WritePin(SD_CS_PORT, SD_CS_PIN, GPIO_PIN_SET);
 	HAL_Delay(1);
 }
 
-/* SPI transmit a byte */
+// Gửi 1 byte qua SPI
 static void SPI_TxByte(uint8_t data)
 {
-//	while(!__HAL_SPI_GET_FLAG(HSPI_SDCARD, SPI_FLAG_TXE));
 	HAL_SPI_Transmit(HSPI_SDCARD, &data, 1, SPI_TIMEOUT);
 }
 
-/* SPI transmit buffer */
+// Gửi buffer qua SPI
 static void SPI_TxBuffer(uint8_t *buffer, uint16_t len)
 {
-//	while(!__HAL_SPI_GET_FLAG(HSPI_SDCARD, SPI_FLAG_TXE));
 	HAL_SPI_Transmit(HSPI_SDCARD, buffer, len, SPI_TIMEOUT);
 }
 
-/* SPI receive a byte */
+// Nhận 1 byte qua SPI
 static uint8_t SPI_RxByte(void)
 {
-	uint8_t dummy, data;	// dummy dùng để trigger SPI nhận dữ liệu, giải thích vì sao chọn 0xFF
-	dummy = 0xFF;
-
-//	while(!__HAL_SPI_GET_FLAG(HSPI_SDCARD, SPI_FLAG_TXE));
+	uint8_t dummy = 0xFF, data;
 	HAL_SPI_TransmitReceive(HSPI_SDCARD, &dummy, &data, 1, SPI_TIMEOUT);
-
 	return data;
 }
 
-/* SPI receive a byte via pointer */
-static void SPI_RxBytePtr(uint8_t *buff) 
+// Nhận 1 byte qua SPI và lưu vào con trỏ buff
+static void SPI_RxBytePtr(uint8_t *buff)
 {
 	*buff = SPI_RxByte();
 }
 
-/*************************************************
+/********************************************
  * 2. HÀM QUẢN LÝ NGUỒN & TRẠNG THÁI THẺ SD
- *************************************************/
+ ********************************************/
 
-/* wait SD ready */
+// Chờ thẻ SD sẵn sàng (trả về 0xFF)
 static uint8_t SD_ReadyWait(void)
 {
 	uint8_t res;
-
-	/* timeout 500ms */
-	Timer2 = 100;	// giải thích ý nghĩa của Timer2
-
-	/* if SD goes ready, receives 0xFF */
+	Timer2 = 100; // Timeout 500ms
 	do {
 		res = SPI_RxByte();
 	} while ((res != 0xFF) && Timer2);
-
 	return res;
 }
 
-/* power on */
-static void SD_PowerOn(void) 
+// Bật nguồn thẻ SD và đưa về trạng thái idle
+static void SD_PowerOn(void)
 {
 	uint8_t args[6];
 	uint32_t cnt = 0x1FFF;
-
-	/* transmit bytes to wake up */
 	DESELECT();
 	for(int i = 0; i < 10; i++)
 	{
 		SPI_TxByte(0xFF);
 	}
-
-	/* slave select */
-	SELECT();	
-
-	/* make idle state */
-	args[0] = CMD0;		/* CMD0:GO_IDLE_STATE */
+	SELECT();
+	args[0] = CMD0;
 	args[1] = 0;
 	args[2] = 0;
 	args[3] = 0;
 	args[4] = 0;
-	args[5] = 0x95;		/* CRC */
-
+	args[5] = 0x95;
 	SPI_TxBuffer(args, sizeof(args));
-
-	/* wait response */
 	while ((SPI_RxByte() != 0x01) && cnt)
 	{
 		cnt--;
 	}
-
 	DESELECT();
 	SPI_TxByte(0XFF);
-
 	PowerFlag = 1;
 }
 
-/* power off */
-static void SD_PowerOff(void) 
+// Tắt nguồn thẻ SD
+static void SD_PowerOff(void)
 {
 	PowerFlag = 0;
 }
 
-/* check power flag */
-static uint8_t SD_CheckPower(void) 
+// Kiểm tra trạng thái nguồn thẻ SD
+static uint8_t SD_CheckPower(void)
 {
 	return PowerFlag;
 }
@@ -156,32 +130,21 @@ static uint8_t SD_CheckPower(void)
 /********************************************
  * 3. HÀM TRUYỀN/NHẬN DỮ LIỆU VỚI THẺ SD
  ********************************************/
- 
- /* receive data block */
+
+// Nhận 1 block dữ liệu từ thẻ SD
 static uint8_t SD_RxDataBlock(uint8_t *buff, unsigned int len)
 {
 	uint8_t token;
-
-	/* timeout 200ms */
-	Timer1 = 100;
-
-	/* loop until receive a response or timeout */
+	Timer1 = 100; // Timeout 200ms
 	do {
 		token = SPI_RxByte();
 	} while((token == 0xFF) && Timer1);
-
-	/* invalid response */
 	if(token != 0xFE) return FALSE;
-
-	/* receive data */
 	do {
 		SPI_RxBytePtr(buff++);
 	} while(len--);
-
-	/* discard CRC */
 	SPI_RxByte();
 	SPI_RxByte();
-
 	return TRUE;
 }
 
