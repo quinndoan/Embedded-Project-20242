@@ -392,7 +392,15 @@ DRESULT SD_disk_read(uint8_t pdrv, uint8_t* buff, uint32_t sector, unsigned int 
 	if (count == 1)
 	{
 		/* READ_SINGLE_BLOCK */
-		if ((SD_SendCmd(CMD17, sector) == 0) && SD_RxDataBlock(buff, 512)) count = 0;
+		if (SD_SendCmd(CMD17, sector) == 0) {
+			if (SD_RxDataBlock(buff, 512)) {
+				count = 0;
+			} else {
+				count = 1; // Data block read failed
+			}
+		} else {
+			count = 1; // Command failed
+		}
 	}
 	else
 	{
