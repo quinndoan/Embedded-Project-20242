@@ -8,6 +8,7 @@
 #include "fatfs_sd.h"
 #include "ff.h"
 #include "string.h"
+#include "stm32f4xx_hal_gpio.h"
 
 extern SPI_HandleTypeDef 	hspi1;
 #define HSPI_SDCARD		 	&hspi1
