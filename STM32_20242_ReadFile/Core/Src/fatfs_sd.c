@@ -10,222 +10,224 @@
 #include "string.h"
 #include "stm32f4xx_hal_gpio.h"
 
+// Định nghĩa các biến toàn cục liên quan đến FATFS và SD Card
 extern SPI_HandleTypeDef hspi1;
 #define HSPI_SDCARD &hspi1
 #define SD_CS_PORT GPIOC
 #define SD_CS_PIN GPIO_PIN_4
 
-char USER_Path[4];   // Đường dẫn ổ đĩa logic
+char USER_Path[4];   // Đường dẫn ổ đĩa logic cho FatFs (ví dụ: "0:")
 FATFS SDFatFs;       // Đối tượng hệ thống file FATFS
-FILINFO fileInfo;    // Thông tin file
-uint8_t sect[512];
+FILINFO fileInfo;    // Thông tin file (tên, thuộc tính, kích thước...)
+uint8_t sect[512];   // Buffer 512 byte cho 1 sector
 
-uint8_t result;
+uint8_t result;      // Biến lưu kết quả trả về
 uint16_t i;
-FRESULT res;
-char *fn;
-DIR dir;
+FRESULT res;         // Kết quả trả về của các hàm FatFs
+char *fn;            // Con trỏ tới tên file
+DIR dir;             // Đối tượng thư mục
 extern UART_HandleTypeDef huart1;
-extern volatile uint16_t Timer1, Timer2, Timer3, Timer4; // Bộ đếm thời gian 1ms
+extern volatile uint16_t Timer1, Timer2, Timer3, Timer4; // Bộ đếm thời gian 1ms cho timeout
 
-static volatile DSTATUS Stat = STA_NOINIT; // Trạng thái thẻ SD
+static volatile DSTATUS Stat = STA_NOINIT; // Trạng thái thẻ SD: chưa khởi tạo, không có thẻ, bảo vệ ghi...
 static uint8_t CardType;                   // Loại thẻ: 0:MMC, 1:SDC, 2:Block addressing
-static uint8_t PowerFlag = 0;              // Cờ nguồn thẻ SD
+static uint8_t PowerFlag = 0;              // Cờ nguồn thẻ SD (1: đã bật nguồn, 0: đã tắt)
 
 /********************************************
  * 1. HÀM SPI GIAO TIẾP VỚI THẺ SD
  ********************************************/
+// Các hàm này dùng để giao tiếp SPI mức thấp với thẻ SD
 
-// Kéo chân CS (Chip Select) xuống mức thấp
+// Kéo chân CS (Chip Select) xuống mức thấp để chọn thẻ SD
 static void SELECT(void)
 {
-	HAL_Delay(1);
+    // Nếu có nhiều slave thì cần thao tác chân CS, ở đây chỉ có 1 slave nên chỉ delay
+    HAL_Delay(1);
 }
 
-// Đưa chân CS lên mức cao
+// Đưa chân CS lên mức cao để bỏ chọn thẻ SD
 static void DESELECT(void)
 {
-	HAL_Delay(1);
+    HAL_Delay(1);
 }
 
 // Gửi 1 byte qua SPI
 static void SPI_TxByte(uint8_t data)
 {
-	HAL_SPI_Transmit(HSPI_SDCARD, &data, 1, SPI_TIMEOUT);
+    // Truyền 1 byte qua SPI, dùng cho lệnh hoặc dữ liệu
+    HAL_SPI_Transmit(HSPI_SDCARD, &data, 1, SPI_TIMEOUT);
 }
 
-// Gửi buffer qua SPI
+// Gửi 1 buffer qua SPI
 static void SPI_TxBuffer(uint8_t *buffer, uint16_t len)
 {
-	HAL_SPI_Transmit(HSPI_SDCARD, buffer, len, SPI_TIMEOUT);
+    // Truyền nhiều byte liên tiếp qua SPI
+    HAL_SPI_Transmit(HSPI_SDCARD, buffer, len, SPI_TIMEOUT);
 }
 
 // Nhận 1 byte qua SPI
 static uint8_t SPI_RxByte(void)
 {
-	uint8_t dummy = 0xFF, data;
-	HAL_SPI_TransmitReceive(HSPI_SDCARD, &dummy, &data, 1, SPI_TIMEOUT);
-	return data;
+    // Để nhận dữ liệu từ slave, master phải gửi 1 byte "dummy" (0xFF)
+    uint8_t dummy = 0xFF, data;
+    HAL_SPI_TransmitReceive(HSPI_SDCARD, &dummy, &data, 1, SPI_TIMEOUT);
+    return data;
 }
 
 // Nhận 1 byte qua SPI và lưu vào con trỏ buff
 static void SPI_RxBytePtr(uint8_t *buff)
 {
-	*buff = SPI_RxByte();
+    *buff = SPI_RxByte();
 }
 
 /********************************************
  * 2. HÀM QUẢN LÝ NGUỒN & TRẠNG THÁI THẺ SD
  ********************************************/
+// Các hàm này dùng để kiểm soát nguồn và trạng thái sẵn sàng của thẻ SD
 
-// Chờ thẻ SD sẵn sàng (trả về 0xFF)
+// Chờ thẻ SD sẵn sàng (trả về 0xFF), timeout nếu quá lâu
 static uint8_t SD_ReadyWait(void)
 {
-	uint8_t res;
-	Timer2 = 100; // Timeout 500ms
-	do {
-		res = SPI_RxByte();
-	} while ((res != 0xFF) && Timer2);
-	return res;
+    uint8_t res;
+    Timer2 = 100; // Timeout 500ms (Timer2 giảm mỗi 5ms hoặc 10ms tuỳ cấu hình timer)
+    do {
+        res = SPI_RxByte(); // Đọc liên tục cho đến khi nhận được 0xFF (SD sẵn sàng)
+    } while ((res != 0xFF) && Timer2);
+    return res;
 }
 
 // Bật nguồn thẻ SD và đưa về trạng thái idle
 static void SD_PowerOn(void)
 {
-	uint8_t args[6];
-	uint32_t cnt = 0x1FFF;
-	DESELECT();
-	for(int i = 0; i < 10; i++)
-	{
-		SPI_TxByte(0xFF);
-	}
-	SELECT();
-	args[0] = CMD0;
-	args[1] = 0;
-	args[2] = 0;
-	args[3] = 0;
-	args[4] = 0;
-	args[5] = 0x95;
-	SPI_TxBuffer(args, sizeof(args));
-	while ((SPI_RxByte() != 0x01) && cnt)
-	{
-		cnt--;
-	}
-	DESELECT();
-	SPI_TxByte(0XFF);
-	PowerFlag = 1;
+    uint8_t args[6];
+    uint32_t cnt = 0x1FFF; // Đếm timeout cho quá trình khởi tạo
+    // Gửi nhiều byte 0xFF để "đánh thức" thẻ SD (theo chuẩn SD)
+    DESELECT();
+    for(int i = 0; i < 10; i++)
+    {
+        SPI_TxByte(0xFF);
+    }
+    // Chọn thẻ SD
+    SELECT();
+    // Gửi lệnh CMD0 (GO_IDLE_STATE) để đưa thẻ về trạng thái idle
+    args[0] = CMD0; // Lệnh CMD0
+    args[1] = 0;
+    args[2] = 0;
+    args[3] = 0;
+    args[4] = 0;
+    args[5] = 0x95; // CRC hợp lệ cho CMD0 (bắt buộc theo chuẩn SD, các lệnh khác CRC có thể bỏ qua ở chế độ SPI)
+    SPI_TxBuffer(args, sizeof(args));
+    // Chờ phản hồi 0x01 (idle), hoặc timeout
+    while ((SPI_RxByte() != 0x01) && cnt)
+    {
+        cnt--;
+    }
+    DESELECT();
+    SPI_TxByte(0XFF); // Gửi thêm 1 byte dummy
+    PowerFlag = 1; // Đánh dấu đã bật nguồn
 }
 
-// Tắt nguồn thẻ SD
+// Tắt nguồn thẻ SD (chỉ set cờ, không thao tác phần cứng)
 static void SD_PowerOff(void)
 {
-	PowerFlag = 0;
+    PowerFlag = 0;
 }
 
-// Kiểm tra trạng thái nguồn thẻ SD
+// Kiểm tra trạng thái nguồn thẻ SD (1: đã bật, 0: đã tắt)
 static uint8_t SD_CheckPower(void)
 {
-	return PowerFlag;
+    return PowerFlag;
 }
 
 /********************************************
  * 3. HÀM TRUYỀN/NHẬN DỮ LIỆU VỚI THẺ SD
  ********************************************/
+// Các hàm này dùng để truyền/nhận block dữ liệu giữa MCU và thẻ SD
 
-// Nhận 1 block dữ liệu từ thẻ SD
+// Nhận 1 block dữ liệu từ thẻ SD (thường là 512 byte)
+// Trả về TRUE nếu thành công, FALSE nếu lỗi hoặc timeout
 static uint8_t SD_RxDataBlock(uint8_t *buff, unsigned int len)
 {
-	uint8_t token;
-	Timer1 = 100; // Timeout 200ms
-	do {
-		token = SPI_RxByte();
-	} while((token == 0xFF) && Timer1);
-	if(token != 0xFE) return FALSE;
-	do {
-		SPI_RxBytePtr(buff++);
-	} while(len--);
-	SPI_RxByte();
-	SPI_RxByte();
-	return TRUE;
+    uint8_t token;
+    Timer1 = 100; // Timeout 200ms
+    // Chờ token bắt đầu dữ liệu (0xFE), hoặc timeout
+    do {
+        token = SPI_RxByte();
+    } while((token == 0xFF) && Timer1);
+    if(token != 0xFE) return FALSE; // Không nhận được token hợp lệ
+    // Nhận dữ liệu
+    do {
+        SPI_RxBytePtr(buff++);
+    } while(len--);
+    // Bỏ qua 2 byte CRC
+    SPI_RxByte();
+    SPI_RxByte();
+    return TRUE;
 }
 
-/* transmit data block */
+// Gửi 1 block dữ liệu tới thẻ SD (chỉ dùng khi _USE_WRITE == 1)
 #if _USE_WRITE == 1
 static uint8_t SD_TxDataBlock(const uint8_t *buff, uint8_t token)
 {
-	uint8_t resp;
-	uint8_t i = 0;
-
-	/* wait SD ready */
-	if (SD_ReadyWait() != 0xFF) return FALSE;
-
-	/* transmit token */
-	SPI_TxByte(token);
-
-	/* if it's not STOP token, transmit data */
-	if (token != 0xFD)
-	{	Timer3 = 200;
-		Timer4 =200;
-		SPI_TxBuffer((uint8_t*)buff, 512);
-
-		/* discard CRC */
-		SPI_RxByte();
-		SPI_RxByte();
-
-		/* receive response */
-		while (i <= 64 && Timer4)
-		{
-			resp = SPI_RxByte();
-
-			/* transmit 0x05 accepted */
-			if ((resp & 0x1F) == 0x05) break;
-			i++;
-		}
-
-		/* recv buffer clear */
-		while (SPI_RxByte() == 0 && Timer3);
-	}
-
-	/* transmit 0x05 accepted */
-	if ((resp & 0x1F) == 0x05) return TRUE;
-
-	return FALSE;
+    uint8_t resp;
+    uint8_t i = 0;
+    // Chờ thẻ sẵn sàng
+    if (SD_ReadyWait() != 0xFF) return FALSE;
+    // Gửi token bắt đầu ghi
+    SPI_TxByte(token);
+    // Nếu không phải token STOP, gửi dữ liệu
+    if (token != 0xFD)
+    {
+        Timer3 = 200;
+        Timer4 = 200;
+        SPI_TxBuffer((uint8_t*)buff, 512); // Gửi 512 byte dữ liệu
+        // Bỏ qua 2 byte CRC
+        SPI_RxByte();
+        SPI_RxByte();
+        // Nhận phản hồi từ thẻ SD
+        while (i <= 64 && Timer4)
+        {
+            resp = SPI_RxByte();
+            // 0x05: dữ liệu được chấp nhận
+            if ((resp & 0x1F) == 0x05) break;
+            i++;
+        }
+        // Xoá bộ đệm nhận
+        while (SPI_RxByte() == 0 && Timer3);
+    }
+    // Kiểm tra phản hồi cuối cùng
+    if ((resp & 0x1F) == 0x05) return TRUE;
+    return FALSE;
 }
 #endif /* _USE_WRITE */
 
-/* transmit command */
+// Gửi lệnh tới thẻ SD (SPI CMD)
+// cmd: mã lệnh, arg: tham số 32 bit
+// Trả về mã phản hồi từ thẻ SD
 static uint8_t SD_SendCmd(uint8_t cmd, uint32_t arg)
 {
-	uint8_t crc, res;
-
-	/* wait SD ready */
-	if (SD_ReadyWait() != 0xFF) return 0xFF;
-
-	/* transmit command */
-	SPI_TxByte(cmd); 					/* Command */
-	SPI_TxByte((uint8_t)(arg >> 24)); 	/* Argument[31..24] */
-	SPI_TxByte((uint8_t)(arg >> 16)); 	/* Argument[23..16] */
-	SPI_TxByte((uint8_t)(arg >> 8)); 	/* Argument[15..8] */
-	SPI_TxByte((uint8_t)arg); 			/* Argument[7..0] */
-
-	/* prepare CRC */
-	if(cmd == CMD0) crc = 0x95;	/* CRC for CMD0(0) */		// giải thích các giá trị cho CRC
-	else if(cmd == CMD8) crc = 0x87;	/* CRC for CMD8(0x1AA) */
-	else crc = 1;
-
-	/* transmit CRC */
-	SPI_TxByte(crc);
-
-	/* Skip a stuff byte when STOP_TRANSMISSION */
-	if (cmd == CMD12) SPI_RxByte();
-
-	/* receive response */
-	uint8_t n = 10;
-	do {
-		res = SPI_RxByte();
-	} while ((res & 0x80) && --n);
-
-	return res;
+    uint8_t crc, res;
+    // Chờ thẻ sẵn sàng
+    if (SD_ReadyWait() != 0xFF) return 0xFF;
+    // Gửi lệnh và tham số
+    SPI_TxByte(cmd); // Command
+    SPI_TxByte((uint8_t)(arg >> 24)); // Argument[31..24]
+    SPI_TxByte((uint8_t)(arg >> 16)); // Argument[23..16]
+    SPI_TxByte((uint8_t)(arg >> 8));  // Argument[15..8]
+    SPI_TxByte((uint8_t)arg);         // Argument[7..0]
+    // CRC chỉ bắt buộc với CMD0 và CMD8, các lệnh khác có thể CRC bất kỳ
+    if(cmd == CMD0) crc = 0x95;      // CRC đúng cho CMD0
+    else if(cmd == CMD8) crc = 0x87; // CRC đúng cho CMD8
+    else crc = 1;                    // CRC bất kỳ
+    SPI_TxByte(crc);
+    // Nếu là lệnh STOP_TRANSMISSION (CMD12), cần đọc bỏ 1 byte
+    if (cmd == CMD12) SPI_RxByte();
+    // Nhận phản hồi từ thẻ SD (tối đa 10 lần)
+    uint8_t n = 10;
+    do {
+        res = SPI_RxByte();
+    } while ((res & 0x80) && --n);
+    return res;
 }
 
 /********************************************
