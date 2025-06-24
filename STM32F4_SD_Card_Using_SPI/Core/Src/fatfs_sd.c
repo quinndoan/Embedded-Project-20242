@@ -31,7 +31,7 @@ extern UART_HandleTypeDef huart1;
 extern volatile uint16_t Timer1, Timer2, Timer3, Timer4; // Bộ đếm thời gian 1ms cho timeout
 
 static volatile DSTATUS Stat = STA_NOINIT; // Trạng thái thẻ SD: chưa khởi tạo, không có thẻ, bảo vệ ghi...
-static uint8_t CardType;                   // Loại thẻ: 0:MMC, 1:SDC, 2:Block addressing
+static uint8_t CardType;
 static uint8_t PowerFlag = 0;              // Cờ nguồn thẻ SD (1: đã bật nguồn, 0: đã tắt)
 
 /********************************************
@@ -42,11 +42,9 @@ static uint8_t PowerFlag = 0;              // Cờ nguồn thẻ SD (1: đã b�
 // Kéo chân CS (Chip Select) xuống mức thấp để chọn thẻ SD
 static void SELECT(void)
 {
-    // Nếu có nhiều slave thì cần thao tác chân CS, ở đây chỉ có 1 slave nên chỉ delay
     HAL_Delay(1);
 }
 
-// Đưa chân CS lên mức cao để bỏ chọn thẻ SD
 static void DESELECT(void)
 {
     HAL_Delay(1);
@@ -212,7 +210,7 @@ static uint8_t SD_SendCmd(uint8_t cmd, uint32_t arg)
     if (SD_ReadyWait() != 0xFF) return 0xFF;
     // Gửi lệnh và tham số
     SPI_TxByte(cmd); // Command
-    SPI_TxByte((uint8_t)(arg >> 24)); // Argument[31..24]
+    SPI_TxByte((uint8_t)(arg >> 24)); // Argument[31..24]			// SPI truyền 8 bit một lần, và cần gửi 32bit theo big endian
     SPI_TxByte((uint8_t)(arg >> 16)); // Argument[23..16]
     SPI_TxByte((uint8_t)(arg >> 8));  // Argument[15..8]
     SPI_TxByte((uint8_t)arg);         // Argument[7..0]
@@ -394,7 +392,7 @@ DRESULT SD_disk_read(uint8_t pdrv, uint8_t* buff, uint32_t sector, unsigned int 
 
 /* Ghi sector vào thẻ SD */
 #if _USE_WRITE == 1
-DRESULT SD_disk_write(uint8_t pdrv, const uint8_t* buff, uint32_t sector, unsigned int count) 
+DRESULT SD_disk_write(uint8_t pdrv, const uint8_t* buff, uint32_t sector, unsigned int count) // count là số sector
 {
 	/* Kiểm tra tham số */
 	if (pdrv || !count) return RES_PARERR;
@@ -449,13 +447,13 @@ DRESULT SD_disk_write(uint8_t pdrv, const uint8_t* buff, uint32_t sector, unsign
 #endif
 
 /* ioctl */
-DRESULT SD_disk_ioctl(uint8_t drv, uint8_t ctrl, void *buff) 
+DRESULT SD_disk_ioctl(uint8_t drv, uint8_t ctrl, void *buff) // ctrl: dạng lệnh, drv: số ổ đĩa vật lý, buff: vùng đệm nhận kết quả
 {
 	DRESULT res;
 	uint8_t n, csd[16], *ptr = buff;
 	uint16_t csize;
 
-	/* pdrv should be 0 */
+	/* pdrv should be 0, since it is SD Card */
 	if (drv) return RES_PARERR;
 	res = RES_ERROR;
 
@@ -492,7 +490,7 @@ DRESULT SD_disk_ioctl(uint8_t drv, uint8_t ctrl, void *buff)
 			/* SEND_CSD */
 			if ((SD_SendCmd(CMD9, 0) == 0) && SD_RxDataBlock(csd, 16))
 			{
-				if ((csd[0] >> 6) == 1)
+				if ((csd[0] >> 6) == 1)					// csd: card specific data
 				{
 					/* SDC V2 */
 					csize = csd[9] + ((WORD) csd[8] << 8) + 1;
@@ -515,24 +513,6 @@ DRESULT SD_disk_ioctl(uint8_t drv, uint8_t ctrl, void *buff)
 		case CTRL_SYNC:
 			if (SD_ReadyWait() == 0xFF) res = RES_OK;
 			break;
-		case MMC_GET_CSD:
-			/* SEND_CSD */
-			if (SD_SendCmd(CMD9, 0) == 0 && SD_RxDataBlock(ptr, 16)) res = RES_OK;
-			break;
-		case MMC_GET_CID:
-			/* SEND_CID */
-			if (SD_SendCmd(CMD10, 0) == 0 && SD_RxDataBlock(ptr, 16)) res = RES_OK;
-			break;
-		case MMC_GET_OCR:
-			/* READ_OCR */
-			if (SD_SendCmd(CMD58, 0) == 0)
-			{
-				for (n = 0; n < 4; n++)
-				{
-					*ptr++ = SPI_RxByte();
-				}
-				res = RES_OK;
-			}
 		default:
 			res = RES_PARERR;
 		}
@@ -560,20 +540,20 @@ void SD_List_File(void){
 		strcpy(fileInfo.fname, (char*)sect);
 		//fileInfo.fname = (char*)sect;
 		fileInfo.fsize = sizeof(sect);
-		result = f_opendir(&dir, "/");
+		result = f_opendir(&dir, "/");				// mở thư mục gốc trên thẻ
 		//Liet ke danh sach tep tin co trong sd card
 		if (result == FR_OK)
 		{
 			while(1)
 			{
 				result = f_readdir(&dir, &fileInfo);
-				if (result==FR_OK && fileInfo.fname[0])
+				if (result==FR_OK && fileInfo.fname[0])		// kiểm tra đọc và lấy ký tự đầu tiên của file/dir
 				{
 					fn = fileInfo.fname; // Pointer to the LFN buffer
-					//khi truyen buffer vao HAL_UART thi truyen vao dia chi dau tien cua mang se liet ke het danh sach cac file co trong SD
+
 					if(strlen(fn)) HAL_UART_Transmit(&huart1,(uint8_t*)fn,strlen(fn),0x1000);
 					else HAL_UART_Transmit(&huart1,(uint8_t*)fileInfo.fname,strlen((char*)fileInfo.fname),0x1000);
-					if(fileInfo.fattrib&AM_DIR)
+					if(fileInfo.fattrib&AM_DIR)				//nếu attribute là DIR thì in thêm DIR để phân biệt
 					{
 						HAL_UART_Transmit(&huart1,(uint8_t*)"  [DIR]",7,0x1000);
 					}
@@ -601,7 +581,7 @@ void SD_creatSubDir(char* filename)
 			case FR_OK:
 				break;
 			case FR_NO_FILE:
-				res = f_mkdir(filename);
+				res = f_mkdir(filename);				// tạo thư mục mới nếu chưa có
 				if(res != FR_OK) Error_Handler();
 				break;
 			default:
@@ -610,7 +590,7 @@ void SD_creatSubDir(char* filename)
 	}
 }
 
-/* Hàm này xóa được sub dir, chứa cả file lẫn folder
+/* Hàm này để hỗ trợ xóa được sub dir, sub dir có thể chứa cả file lẫn folder
 */
 FRESULT delete_node (
     TCHAR* path,    /* Path name buffer with the sub-directory to delete */
@@ -635,9 +615,9 @@ FRESULT delete_node (
         j = 0;
         do {    /* Make a path name */
             if (i + j >= sz_buff) { /* Buffer over flow? */
-                fr = 100; break;    /* Fails with 100 when buffer overflow */
+                fr = 100; break;    /* Fails with 100 when buffer overflow, suppose to debug*/
             }
-            path[i + j] = fno->fname[j];
+            path[i + j] = fno->fname[j];			// ghép frame vào cuối path
         } while (fno->fname[j++]);
         if (fno->fattrib & AM_DIR) {    /* Item is a directory */
             fr = delete_node(path, sz_buff, fno);
@@ -665,7 +645,7 @@ void SD_deleteFolder(char* foldername)
 	{
 		char path[50] = {0};
 		strcpy(path,"0:");
-		strcat(path,foldername);
+		strcat(path,foldername);			// nối thêm foldername vào path
 		res = f_opendir(&dir, path);
 		if (res != FR_OK)
 		{

@@ -32,5 +32,4 @@ Middlewares/Third_Party/FatFs/src \
 Middlewares/Third_Party/FatFs/src/option \
 USB_DEVICE/App \
 USB_DEVICE/Target \
-FATFS/App \
 

@@ -75,8 +75,8 @@ char buffer[1024];
 
 UINT br, bw;
 
-// capacity
-FATFS *pfs;
+
+FATFS *pfs;			// con trỏ đến hệ thống file system
 DWORD fre_clust;
 uint32_t total, free_space;
 char option[4];
